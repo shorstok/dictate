@@ -1,0 +1,5 @@
+{
+    "name": "dictate-cpp",
+    "version": "0.1.0",
+    "dependencies": ["curl", "nlohmann-json", "wil", "mp3lame"]
+}

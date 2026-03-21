@@ -1,0 +1,6 @@
+#include "app_resources.h"
+
+IDI_APP_ICON ICON "..\\assets\\app.ico"
+IDI_APP_LISTENING ICON "..\\assets\\app_listening.ico"
+IDI_APP_TRANSCRIBING ICON "..\\assets\\app_transcribing.ico"
+IDI_APP_ERROR ICON "..\\assets\\app_error.ico"

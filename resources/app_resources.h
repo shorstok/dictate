@@ -1,0 +1,9 @@
+#ifndef APP_RESOURCES_H
+#define APP_RESOURCES_H
+
+#define IDI_APP_ICON 101
+#define IDI_APP_LISTENING 102
+#define IDI_APP_TRANSCRIBING 103
+#define IDI_APP_ERROR 104
+
+#endif

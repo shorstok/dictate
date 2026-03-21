@@ -1,0 +1,31 @@
+# Build output
+out/
+
+# vcpkg installed packages (restored during build)
+vcpkg_installed/
+
+# VS / CMake generated
+.vs/
+CMakeSettings.json
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+
+# Compiled output
+*.exe
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.dll
+*.exp
+
+# Audio / runtime files
+mic_input.wav
+dictation_error.log
+
+# Secrets
+.env
+openai_key.txt
+.claude/settings.local.json
