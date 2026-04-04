@@ -1,7 +1,14 @@
 #pragma once
 #include <windows.h>
 
+enum class InputMode {
+    ToggleHotkey,
+    HoldCtrlWin
+};
+
 namespace config {
+    constexpr InputMode kInputMode = InputMode::HoldCtrlWin;
+
     constexpr int kSampleRate  = 16000;
     constexpr int kChannels    = 1;
     constexpr UINT kHotkeyModifiers = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;

@@ -18,6 +18,8 @@
 constexpr UINT WM_APP_TRANSCRIPTION_OK    = WM_APP + 1;
 constexpr UINT WM_APP_TRANSCRIPTION_ERROR = WM_APP + 2;
 constexpr UINT WM_APP_TRAY                = WM_APP + 10;
+constexpr UINT WM_APP_HOLD_START          = WM_APP + 20;
+constexpr UINT WM_APP_HOLD_STOP           = WM_APP + 21;
 
 class App {
 public:

@@ -10,10 +10,20 @@ public:
     HotkeyManager& operator=(const HotkeyManager&) = delete;
 
     bool register_hotkey(HWND hwnd, int id, UINT modifiers, UINT vk);
+    bool install_hold_ctrl_win(HWND hwnd);
     void unregister_hotkey();
 
 private:
-    HWND hwnd_{nullptr};
-    int  id_{0};
-    bool registered_{false};
+    static LRESULT CALLBACK keyboard_proc(int code, WPARAM wparam, LPARAM lparam);
+
+    HWND  hwnd_{nullptr};
+    int   id_{0};
+    bool  registered_{false};
+
+    HHOOK hook_{nullptr};
+    bool  ctrl_down_{false};
+    bool  win_down_{false};
+    bool  hold_active_{false};
+
+    static HotkeyManager* self_;
 };

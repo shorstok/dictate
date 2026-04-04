@@ -72,6 +72,18 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
         return 0;
     }
 
+    case WM_APP_HOLD_START:
+        if (app && app->state_ == AppState::idle) {
+            app->start_recording();
+        }
+        return 0;
+
+    case WM_APP_HOLD_STOP:
+        if (app && app->state_ == AppState::listening) {
+            app->stop_recording_and_transcribe();
+        }
+        return 0;
+
     case WM_APP_TRAY:
         if (app) {
             switch (LOWORD(lparam)) {
@@ -140,11 +152,21 @@ int App::run(HINSTANCE instance, int /*show_cmd*/) {
         return 1;
     }
 
-    if (!hotkey_.register_hotkey(hwnd_, config::kHotkeyId, config::kHotkeyModifiers, config::kHotkeyVK)) {
-        MessageBoxW(nullptr,
-            L"Failed to register hotkey Ctrl+Win.\n"
-            L"Another instance may already be running.",
-            L"dictate_cpp", MB_ICONERROR);
+    bool input_ok = false;
+    switch (config::kInputMode) {
+    case InputMode::ToggleHotkey:
+        input_ok = hotkey_.register_hotkey(
+            hwnd_, config::kHotkeyId, config::kHotkeyModifiers, config::kHotkeyVK);
+        break;
+    case InputMode::HoldCtrlWin:
+        input_ok = hotkey_.install_hold_ctrl_win(hwnd_);
+        break;
+    }
+
+    if (!input_ok) {
+        const DWORD err = GetLastError();
+        std::wstring msg = L"Failed to install input handler. GetLastError=" + std::to_wstring(err);
+        MessageBoxW(nullptr, msg.c_str(), L"dictate_cpp", MB_ICONERROR);
         return 1;
     }
 
@@ -256,7 +278,7 @@ void App::start_recording() {
         return;
     }
 
-    Beep(5000, 25);
+    Beep(9000, 5);
     overlay_.show_listening();
     state_ = AppState::listening;
     set_tray_state(TrayState::Listening);
@@ -264,7 +286,7 @@ void App::start_recording() {
 
 void App::stop_recording_and_transcribe() {
     const RecordedAudio recorded = recorder_.stop();
-    Beep(2500, 25);
+    Beep(900, 5);
 
     if (!recorded.ok) {
         const std::wstring message = utf8_to_wide(recorded.error.empty() ? "Recording error" : recorded.error);
@@ -337,10 +359,17 @@ void App::stop_recording_and_transcribe() {
 
 void App::on_transcription_success(const std::wstring& text) {
     last_transcript_ = text;
+
+    auto prev_clipboard = get_clipboard_text(hwnd_);
     set_clipboard_text(hwnd_, text);
     paste_.restore_and_paste();
+
+    Sleep(100);
+    if (prev_clipboard)
+        set_clipboard_text(hwnd_, *prev_clipboard);
+
     overlay_.show_done();
-    Beep(8000, 25);
+    Beep(9000, 5);
     state_ = AppState::idle;
     set_tray_state(TrayState::Idle);
 }
