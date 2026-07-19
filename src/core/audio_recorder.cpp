@@ -5,9 +5,9 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio/miniaudio.h"
 
-#include "audio_recorder.hpp"
-#include "config.hpp"
-#include "mp3_encoder.hpp"
+#include "core/audio_recorder.hpp"
+#include "core/config.hpp"
+#include "core/mp3_encoder.hpp"
 
 #include <mutex>
 #include <string>

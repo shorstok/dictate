@@ -1,18 +1,13 @@
-#include "user_config.hpp"
+#include "core/user_config.hpp"
 
-#include "config.hpp"
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#include <shlobj.h>
+#include "core/config.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <exception>
 #include <fstream>
 #include <system_error>
+#include <utility>
 
 #include <nlohmann/json.hpp>
 
@@ -31,47 +26,15 @@ namespace {
     }
 }
 
-std::filesystem::path UserConfigStore::appdata_dir(std::string& error) const {
-    error.clear();
-
-    PWSTR raw = nullptr;
-    const HRESULT hr = SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &raw);
-    if (FAILED(hr) || !raw) {
-        error = "Failed to resolve LocalAppData path.";
-        return {};
-    }
-
-    std::filesystem::path base(raw);
-    CoTaskMemFree(raw);
-
-    std::error_code ec;
-    const std::filesystem::path dir = base / config::kConfigSubdir;
-    std::filesystem::create_directories(dir, ec);
-    if (ec) {
-        error = "Failed to create config directory: " + dir.string();
-        return {};
-    }
-
-    return dir;
-}
-
-std::filesystem::path UserConfigStore::config_path(std::string& error) const {
-    const std::filesystem::path dir = appdata_dir(error);
-    if (dir.empty()) {
-        return {};
-    }
-    return dir / config::kConfigFilename;
-}
+UserConfigStore::UserConfigStore(std::filesystem::path data_dir)
+    : data_dir_(std::move(data_dir))
+{}
 
 bool UserConfigStore::append_transcript_log(const std::string& text, std::string& error) const {
     error.clear();
 
-    const std::filesystem::path dir = appdata_dir(error);
-    if (dir.empty()) {
-        return false;
-    }
-
-    std::ofstream f(dir / config::kTranscribeLogFilename, std::ios::out | std::ios::binary | std::ios::app);
+    std::ofstream f(data_dir_ / config::kTranscribeLogFilename,
+                    std::ios::out | std::ios::binary | std::ios::app);
     if (!f) {
         error = "Failed to open transcribe.log for appending.";
         return false;
@@ -113,15 +76,15 @@ bool UserConfigStore::write_stub_file(const std::filesystem::path& path, std::st
 
 UserConfigLoadResult UserConfigStore::ensure_exists_and_load() const {
     UserConfigLoadResult result;
+    result.config_path = data_dir_ / config::kConfigFilename;
 
-    std::string path_error;
-    result.config_path = config_path(path_error);
-    if (result.config_path.empty()) {
-        result.error = path_error.empty() ? "Unable to locate config path." : path_error;
+    std::error_code ec;
+    std::filesystem::create_directories(data_dir_, ec);
+    if (ec) {
+        result.error = "Failed to create config directory: " + data_dir_.string();
         return result;
     }
 
-    std::error_code ec;
     const bool exists = std::filesystem::exists(result.config_path, ec);
     if (ec) {
         result.error = "Failed to check config file existence: " + result.config_path.string();

@@ -5,6 +5,8 @@
 #include <windows.h>
 #include <string>
 
+#include "core/platform.hpp"
+
 enum class OverlayState {
     Hidden,
     Listening,
@@ -14,23 +16,23 @@ enum class OverlayState {
     Error
 };
 
-class OverlayWindow {
+class OverlayWindow final : public platform::Overlay {
 public:
     OverlayWindow() = default;
-    ~OverlayWindow();
+    ~OverlayWindow() override;
     OverlayWindow(const OverlayWindow&) = delete;
     OverlayWindow& operator=(const OverlayWindow&) = delete;
 
     bool create(HINSTANCE instance, HWND owner = nullptr);
     void destroy();
 
-    void show_listening();
-    void show_listening_latched();
-    void show_transcribing();
-    void show_done();
-    void show_notice(const std::wstring& message);
-    void show_error(const std::wstring& message = L"Error");
-    void hide();
+    // platform::Overlay
+    void show_listening(bool latched) override;
+    void show_transcribing() override;
+    void show_done() override;
+    void show_notice(const std::string& message) override;
+    void show_error(const std::string& message) override;
+    void hide() override;
 
     HWND hwnd() const noexcept { return hwnd_; }
 

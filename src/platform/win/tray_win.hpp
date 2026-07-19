@@ -7,44 +7,42 @@
 
 #include <string>
 
+#include "core/platform.hpp"
+
 constexpr UINT kTrayShowStatusCommand = 1001;
 constexpr UINT kTrayCopyLastCommand = 1002;
 constexpr UINT kTrayExitCommand = 1003;
 
-enum class TrayState {
-    Idle,
-    Listening,
-    Transcribing,
-    Error
-};
-
-class TrayIcon {
+class TrayIcon final : public platform::Tray {
 public:
     TrayIcon() = default;
-    ~TrayIcon();
+    ~TrayIcon() override;
     TrayIcon(const TrayIcon&) = delete;
     TrayIcon& operator=(const TrayIcon&) = delete;
 
     bool create(HWND hwnd, HINSTANCE instance, UINT callback_msg);
     void destroy();
     bool recreate();
-
-    void set_state(TrayState state, const std::wstring& tooltip_suffix = L"");
-    void show_balloon(const std::wstring& title, const std::wstring& text, DWORD info_flags = NIIF_INFO);
     void show_context_menu(POINT screen_pt, bool has_last_transcript);
+
+    // platform::Tray
+    void set_state(platform::TrayState state, const std::string& tooltip_suffix) override;
+    void show_notification(const std::string& title,
+                           const std::string& text,
+                           bool is_error) override;
 
 private:
     bool add_icon();
     bool modify_icon();
     bool load_icons(HINSTANCE instance);
     void destroy_icons();
-    HICON icon_for_state(TrayState state) const noexcept;
+    HICON icon_for_state(platform::TrayState state) const noexcept;
     std::wstring tooltip_for_state() const;
 
     HWND hwnd_{nullptr};
     UINT callback_msg_{0};
     bool added_{false};
-    TrayState state_{TrayState::Idle};
+    platform::TrayState state_{platform::TrayState::Idle};
     std::wstring tooltip_suffix_;
     NOTIFYICONDATAW nid_{};
     HICON idle_icon_{nullptr};

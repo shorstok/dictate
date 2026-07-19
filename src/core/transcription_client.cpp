@@ -1,5 +1,5 @@
-#include "config.hpp"
-#include "transcription_client.hpp"
+#include "core/config.hpp"
+#include "core/transcription_client.hpp"
 
 #include <cstdlib>
 #include <string>

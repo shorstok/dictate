@@ -1,4 +1,5 @@
-#include "overlay_window.hpp"
+#include "overlay_win.hpp"
+#include "utf8_win.hpp"
 #include <windowsx.h>
 
 namespace {
@@ -191,12 +192,9 @@ void OverlayWindow::show_text(OverlayState state, const std::wstring& text, DWOR
     }
 }
 
-void OverlayWindow::show_listening() {
-    show_text(OverlayState::Listening, L"Listening\u2026", 0);
-}
-
-void OverlayWindow::show_listening_latched() {
-    show_text(OverlayState::Listening, L"Listening (latched)\u2026", 0);
+void OverlayWindow::show_listening(bool latched) {
+    show_text(OverlayState::Listening,
+              latched ? L"Listening (latched)\u2026" : L"Listening\u2026", 0);
 }
 
 void OverlayWindow::show_transcribing() {
@@ -207,12 +205,12 @@ void OverlayWindow::show_done() {
     show_text(OverlayState::Done, L"Done", 1200);
 }
 
-void OverlayWindow::show_notice(const std::wstring& message) {
-    show_text(OverlayState::Notice, message, 1400);
+void OverlayWindow::show_notice(const std::string& message) {
+    show_text(OverlayState::Notice, utf8_to_wide(message), 1400);
 }
 
-void OverlayWindow::show_error(const std::wstring& message) {
-    show_text(OverlayState::Error, message.empty() ? L"Error" : message, 1800);
+void OverlayWindow::show_error(const std::string& message) {
+    show_text(OverlayState::Error, message.empty() ? L"Error" : utf8_to_wide(message), 1800);
 }
 
 void OverlayWindow::hide() {

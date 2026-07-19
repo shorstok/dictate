@@ -1,4 +1,4 @@
-#include "mp3_encoder.hpp"
+#include "core/mp3_encoder.hpp"
 
 #include <cstdio>
 #include <vector>
@@ -67,7 +67,11 @@ bool Mp3Encoder::start(const std::filesystem::path& path,
         return false;
     }
 
-    impl_->file = _wfopen(path.c_str(), L"wb");
+#if defined(_WIN32)
+    impl_->file = _wfopen(path.c_str(), L"wb");  // wide path: survives non-ACP characters
+#else
+    impl_->file = std::fopen(path.c_str(), "wb");
+#endif
     if (!impl_->file) {
         error = "Failed to open MP3 output file.";
         impl_->reset_state();

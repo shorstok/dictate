@@ -1,4 +1,5 @@
-#include "tray_icon.hpp"
+#include "tray_win.hpp"
+#include "utf8_win.hpp"
 
 #include "app_resources.h"
 
@@ -55,7 +56,7 @@ void TrayIcon::destroy() {
     nid_ = {};
     hwnd_ = nullptr;
     callback_msg_ = 0;
-    state_ = TrayState::Idle;
+    state_ = platform::TrayState::Idle;
     tooltip_suffix_.clear();
 }
 
@@ -68,24 +69,33 @@ bool TrayIcon::recreate() {
     return add_icon();
 }
 
-void TrayIcon::set_state(TrayState state, const std::wstring& tooltip_suffix) {
+void TrayIcon::set_state(platform::TrayState state, const std::string& tooltip_suffix) {
     state_ = state;
-    tooltip_suffix_ = tooltip_suffix;
+    tooltip_suffix_ = utf8_to_wide(tooltip_suffix);
 
     if (added_) {
         (void)modify_icon();
     }
 }
 
-void TrayIcon::show_balloon(const std::wstring& title, const std::wstring& text, DWORD info_flags) {
+void TrayIcon::show_notification(const std::string& title,
+                                 const std::string& text,
+                                 bool is_error) {
     if (!added_) {
         return;
     }
 
+    // Balloon text is capped (szInfo is 256 wchars); truncate with an ellipsis.
+    std::wstring wide_text = utf8_to_wide(text);
+    constexpr std::size_t kMaxChars = 200;
+    if (wide_text.size() > kMaxChars) {
+        wide_text = wide_text.substr(0, kMaxChars - 3) + L"...";
+    }
+
     nid_.uFlags = NIF_INFO;
-    nid_.dwInfoFlags = info_flags;
-    wcsncpy_s(nid_.szInfoTitle, title.c_str(), _TRUNCATE);
-    wcsncpy_s(nid_.szInfo, text.c_str(), _TRUNCATE);
+    nid_.dwInfoFlags = is_error ? NIIF_ERROR : NIIF_INFO;
+    wcsncpy_s(nid_.szInfoTitle, utf8_to_wide(title).c_str(), _TRUNCATE);
+    wcsncpy_s(nid_.szInfo, wide_text.c_str(), _TRUNCATE);
     Shell_NotifyIconW(NIM_MODIFY, &nid_);
 }
 
@@ -172,15 +182,15 @@ void TrayIcon::destroy_icons() {
     }
 }
 
-HICON TrayIcon::icon_for_state(TrayState state) const noexcept {
+HICON TrayIcon::icon_for_state(platform::TrayState state) const noexcept {
     switch (state) {
-    case TrayState::Listening:
+    case platform::TrayState::Listening:
         return listening_icon_;
-    case TrayState::Transcribing:
+    case platform::TrayState::Transcribing:
         return transcribing_icon_;
-    case TrayState::Error:
+    case platform::TrayState::Error:
         return error_icon_;
-    case TrayState::Idle:
+    case platform::TrayState::Idle:
     default:
         return idle_icon_;
     }
@@ -190,16 +200,16 @@ std::wstring TrayIcon::tooltip_for_state() const {
     std::wstring tip = L"dictate_cpp - ";
 
     switch (state_) {
-    case TrayState::Listening:
+    case platform::TrayState::Listening:
         tip += L"Listening";
         break;
-    case TrayState::Transcribing:
+    case platform::TrayState::Transcribing:
         tip += L"Transcribing";
         break;
-    case TrayState::Error:
+    case platform::TrayState::Error:
         tip += L"Error";
         break;
-    case TrayState::Idle:
+    case platform::TrayState::Idle:
     default:
         tip += L"Idle";
         break;

@@ -56,15 +56,27 @@ Everything lives under `%LOCALAPPDATA%\dictate`:
 ```
 LL keyboard hook (own thread)          UI thread (message loop)              worker (std::jthread)
 ────────────────────────────          ─────────────────────────             ─────────────────────
-Ctrl+Win state machine    ──PostMessage──▸  App::WndProc
+Ctrl+Win state machine    ──PostMessage──▸  App::handle_hotkey
   hold / latch detection                    │ start: miniaudio capture ──▸ LAME ──▸ mic_input.mp3
   suppresses the keys                       │ stop:  duration/silence guards
   from other apps                           │        └─ ok ──▸ spawn worker  ──▸ curl multipart POST
                                             │                                    api.openai.com
-                                            ◂───────────PostMessage (owned wstring)──────┘
+                                            ◂──────────UiDispatcher::post(closure)───────┘
                                             paste: save clipboard ▸ set transcript ▸
                                             refocus target ▸ synthetic Ctrl+V ▸ restore clipboard
 ```
+
+The code is split into a **platform-neutral core** and **platform layers**
+(see the macOS porting guide in [MACOS.md](MACOS.md)):
+
+- `src/core` + `include/core` — the state machine, recording guards, audio →
+  MP3 → OpenAI pipeline, config and history. Talks to the OS only through the
+  interfaces in `include/core/platform.hpp` (`Overlay`, `Tray`, `Clipboard`,
+  `Paster`, `Sound`, `UiDispatcher`). All strings are UTF-8.
+- `src/platform/win` — Win32 implementations of those interfaces plus
+  `wWinMain` and the message loop. Converts UTF-8 ↔ UTF-16 at its boundary.
+- `src/platform/mac` — not implemented; `MACOS.md` documents exactly what to
+  build there.
 
 Key design points:
 
@@ -92,19 +104,20 @@ Key design points:
 
 | File | Responsibility |
 |---|---|
-| `src/main.cpp` | `wWinMain`, curl global init |
-| `src/app.cpp` | Central state machine (idle → listening → transcribing), wires everything together |
-| `src/hotkey_manager.cpp` | LL keyboard hook thread; hold/latch state machine |
-| `src/audio_recorder.cpp` | miniaudio capture device; tracks frames + peak amplitude |
-| `src/mp3_encoder.cpp` | Streaming LAME encoder |
-| `src/transcription_client.cpp` | libcurl multipart upload to OpenAI |
-| `src/overlay_window.cpp` | Borderless topmost status overlay |
-| `src/tray_icon.cpp` | Tray icon, state icons, context menu, balloons |
-| `src/paste_service.cpp` | Foreground-window capture + synthetic Ctrl+V |
-| `src/clipboard_service.cpp` | Get/set clipboard text |
-| `src/user_config.cpp` | `config.json` load/stub, transcript log, LocalAppData paths |
-| `src/history_store.cpp` | Timestamped transcript files, error log |
-| `include/config.hpp` | Compile-time constants (hotkey mode, sample rate, guard thresholds, model) |
+| `include/core/platform.hpp` | The core ↔ platform interface contract |
+| `src/core/app.cpp` | Central state machine (idle → listening → transcribing), guards, pipeline |
+| `src/core/audio_recorder.cpp` | miniaudio capture device; tracks frames + peak amplitude |
+| `src/core/mp3_encoder.cpp` | Streaming LAME encoder |
+| `src/core/transcription_client.cpp` | libcurl multipart upload to OpenAI |
+| `src/core/user_config.cpp` | `config.json` load/stub, transcript log |
+| `src/core/history_store.cpp` | Timestamped transcript files, error log |
+| `include/core/config.hpp` | Compile-time constants (input mode, sample rate, guard thresholds, model) |
+| `src/platform/win/main_win.cpp` | `wWinMain`, hidden window, message loop, service wiring, data-dir resolution |
+| `src/platform/win/hotkey_win.cpp` | LL keyboard hook thread; hold/latch state machine |
+| `src/platform/win/overlay_win.cpp` | Borderless topmost status overlay |
+| `src/platform/win/tray_win.cpp` | Tray icon, state icons, context menu, balloons |
+| `src/platform/win/paste_win.cpp` | Foreground-window capture + synthetic Ctrl+V |
+| `src/platform/win/clipboard_win.cpp` | Get/set clipboard text (UTF-8 ↔ UTF-16) |
 
 ## Building
 
@@ -140,7 +153,10 @@ takes a while; later runs are incremental.
 CMakeLists.txt        the build definition — the single source of truth
 CMakePresets.json     configure/build presets (generator, vcpkg toolchain, out/ layout)
 vcpkg.json            dependency manifest (curl, nlohmann-json, mp3lame)
-src/ include/         application code
+include/core/         portable headers + the platform interface contract
+src/core/             portable implementation (state machine, audio, network, storage)
+src/platform/win/     Win32 layer: entry point, hook, overlay, tray, clipboard, paste
+src/platform/mac/     macOS layer — not yet implemented, see MACOS.md
 external/miniaudio    vendored single-header audio library (not in vcpkg's model of a
                       linkable lib; pinning the header is simpler)
 resources/ assets/    .rc file, icons

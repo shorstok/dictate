@@ -1,10 +1,10 @@
-#include "paste_service.hpp"
+#include "paste_win.hpp"
 
-void PasteService::capture_foreground() {
+void PasteWin::capture_focus() {
     previous_window_ = GetForegroundWindow();
 }
 
-void PasteService::restore_and_paste() {
+void PasteWin::restore_and_paste() {
     if (previous_window_ && IsWindow(previous_window_)) {
         SetForegroundWindow(previous_window_);
         Sleep(60); // give focus a moment to settle

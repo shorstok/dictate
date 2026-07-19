@@ -6,6 +6,10 @@
 #include <atomic>
 #include <thread>
 
+// Global input capture: either a classic RegisterHotKey toggle, or the
+// hold-Ctrl+Win push-to-talk chord via a low-level keyboard hook.
+// Events are delivered by posting WM_HOTKEY / WM_APP_HOLD_* messages to the
+// main window; the message loop translates them into core HotkeyEvents.
 class HotkeyManager {
 public:
     HotkeyManager() = default;

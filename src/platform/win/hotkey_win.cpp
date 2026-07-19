@@ -1,5 +1,5 @@
-#include "hotkey_manager.hpp"
-#include "app.hpp"
+#include "hotkey_win.hpp"
+#include "win_messages.hpp"
 
 HotkeyManager* HotkeyManager::self_ = nullptr;
 

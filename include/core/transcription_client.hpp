@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <string>
 
-#include "user_config.hpp"
+#include "core/user_config.hpp"
 
 struct AudioUploadSpec {
     std::filesystem::path path;
