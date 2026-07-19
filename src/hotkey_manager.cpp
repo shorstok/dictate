@@ -91,8 +91,66 @@ void HotkeyManager::unregister_hotkey() {
     hold_active_ = false;
     combo_session_ = false;
     latched_ = false;
+    lctrl_leaked_ = false;
+    rctrl_leaked_ = false;
+    lwin_leaked_ = false;
+    rwin_leaked_ = false;
     hook_status_ = HookStatus::pending;
     hook_thread_id_ = 0;
+}
+
+// ---------------------------------------------------------------------------
+// Stuck-modifier compensation
+//
+// The first modifier's key-down passes through the hook (a chord can't be
+// recognized from one key), so the OS registers it as pressed. Once the chord
+// activates, all further Ctrl/Win events are suppressed — including that
+// key's release — which would leave the OS believing the key is still held.
+// The moment such a release is suppressed, an equivalent injected release is
+// sent instead (injected events skip our suppression via LLKHF_INJECTED).
+// ---------------------------------------------------------------------------
+
+bool* HotkeyManager::leaked_flag_for(DWORD vk) {
+    switch (vk) {
+    case VK_LCONTROL: return &lctrl_leaked_;
+    case VK_RCONTROL: return &rctrl_leaked_;
+    case VK_LWIN:     return &lwin_leaked_;
+    case VK_RWIN:     return &rwin_leaked_;
+    }
+    return nullptr;
+}
+
+void HotkeyManager::compensate_suppressed_up(DWORD vk) {
+    bool* leaked = leaked_flag_for(vk);
+    if (!leaked || !*leaked) {
+        return;
+    }
+    *leaked = false;
+
+    INPUT inputs[3]{};
+    UINT n = 0;
+
+    if (is_win_vk(vk)) {
+        // A dummy key event breaks the "pure Win tap" the OS would otherwise
+        // see (leaked Win down + injected Win up = Start menu opens).
+        inputs[n].type   = INPUT_KEYBOARD;
+        inputs[n].ki.wVk = 0xFF;  // unassigned VK, ignored by applications
+        ++n;
+        inputs[n].type       = INPUT_KEYBOARD;
+        inputs[n].ki.wVk     = 0xFF;
+        inputs[n].ki.dwFlags = KEYEVENTF_KEYUP;
+        ++n;
+    }
+
+    inputs[n].type       = INPUT_KEYBOARD;
+    inputs[n].ki.wVk     = static_cast<WORD>(vk);
+    inputs[n].ki.dwFlags = KEYEVENTF_KEYUP;
+    if (vk == VK_RCONTROL || is_win_vk(vk)) {
+        inputs[n].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+    }
+    ++n;
+
+    SendInput(n, inputs, sizeof(INPUT));
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +249,19 @@ LRESULT CALLBACK HotkeyManager::keyboard_proc(int code, WPARAM wparam, LPARAM lp
     }
 
     if (suppress_this_event) {
+        // If this key's down leaked through earlier, release it for the OS
+        // too — otherwise the system considers it held until the user taps
+        // it again (visible as "Ctrl/Win stuck" after e.g. a discarded press).
+        if (is_up) {
+            self_->compensate_suppressed_up(vk);
+        }
         return 1;
+    }
+
+    // Event reaches the rest of the system — remember downs so a later
+    // suppressed up can be compensated.
+    if (bool* leaked = self_->leaked_flag_for(vk)) {
+        *leaked = is_down;
     }
     return CallNextHookEx(nullptr, code, wparam, lparam);
 }
