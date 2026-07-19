@@ -84,6 +84,12 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
         }
         return 0;
 
+    case WM_APP_HOLD_LATCHED:
+        if (app && app->state_ == AppState::listening) {
+            app->overlay_.show_listening_latched();
+        }
+        return 0;
+
     case WM_APP_TRAY:
         if (app) {
             switch (LOWORD(lparam)) {
@@ -142,6 +148,14 @@ int App::run(HINSTANCE instance, int /*show_cmd*/) {
     GetModuleFileNameW(nullptr, buf, MAX_PATH);
     exe_dir_ = std::filesystem::path(buf).parent_path();
 
+    // Recordings and history live under LocalAppData\dictate — the exe dir may
+    // not be writable (e.g. Program Files). Fall back to exe dir if resolution fails.
+    std::string data_dir_error;
+    data_dir_ = user_config_.appdata_dir(data_dir_error);
+    if (data_dir_.empty()) {
+        data_dir_ = exe_dir_;
+    }
+
     if (!create_window(instance)) {
         MessageBoxW(nullptr, L"Failed to create application window.", L"dictate_cpp", MB_ICONERROR);
         return 1;
@@ -182,11 +196,11 @@ int App::run(HINSTANCE instance, int /*show_cmd*/) {
 
     // Ensure output directory exists.
     std::error_code ec;
-    std::filesystem::create_directories(exe_dir_ / config::kOutputDir, ec);
+    std::filesystem::create_directories(data_dir_ / config::kOutputDir, ec);
 
     auto cfg = user_config_.ensure_exists_and_load();
     if (!cfg.ok) {
-        HistoryStore store(exe_dir_ / config::kOutputDir);
+        HistoryStore store(data_dir_ / config::kOutputDir);
         store.log_error(cfg.error);
         tray_.destroy();
         hotkey_.unregister_hotkey();
@@ -269,7 +283,7 @@ void App::start_recording() {
     // Snapshot the focused window before the overlay might interfere.
     paste_.capture_foreground();
 
-    const auto mp3_path = exe_dir_ / config::kAudioFilenameMp3;
+    const auto mp3_path = data_dir_ / config::kAudioFilenameMp3;
     std::string error;
     if (!recorder_.start(mp3_path, error)) {
         const std::wstring message = utf8_to_wide(error.empty() ? "Microphone error" : error);
@@ -278,7 +292,8 @@ void App::start_recording() {
         return;
     }
 
-    Beep(9000, 5);
+    recording_started_tick_ = GetTickCount64();
+    Beep(1400, 30);
     overlay_.show_listening();
     state_ = AppState::listening;
     set_tray_state(TrayState::Listening);
@@ -286,7 +301,17 @@ void App::start_recording() {
 
 void App::stop_recording_and_transcribe() {
     const RecordedAudio recorded = recorder_.stop();
-    Beep(900, 5);
+    const ULONGLONG held_ms = GetTickCount64() - recording_started_tick_;
+    Beep(900, 30);
+
+    // Discard accidental presses before anything else — a quick tap is a
+    // user-intent signal, not an error: quiet blip, no error beep, no API call.
+    if (held_ms < static_cast<ULONGLONG>(config::kMinRecordingMs)) {
+        overlay_.show_notice(L"Too short — discarded");
+        state_ = AppState::idle;
+        set_tray_state(TrayState::Idle);
+        return;
+    }
 
     if (!recorded.ok) {
         const std::wstring message = utf8_to_wide(recorded.error.empty() ? "Recording error" : recorded.error);
@@ -303,11 +328,20 @@ void App::stop_recording_and_transcribe() {
         return;
     }
 
+    // Silence gate: a long hold with no speech (muted mic, wrong device)
+    // would otherwise be sent to OpenAI and hallucinate a transcript.
+    if (recorded.peak_amplitude < config::kMinPeakAmplitude) {
+        overlay_.show_notice(L"No speech detected — discarded");
+        state_ = AppState::idle;
+        set_tray_state(TrayState::Idle);
+        return;
+    }
+
     overlay_.show_transcribing();
     state_ = AppState::transcribing;
     set_tray_state(TrayState::Transcribing);
 
-    const auto out_dir = exe_dir_ / config::kOutputDir;
+    const auto out_dir = data_dir_ / config::kOutputDir;
     HWND hwnd = hwnd_;
 
     worker_ = std::jthread([this, recorded, out_dir, hwnd]() {
@@ -325,6 +359,13 @@ void App::stop_recording_and_transcribe() {
         }
 
         auto result = transcription_.transcribe_file(upload, cfg.transcription);
+
+        // Voice recording is no longer needed once transcription succeeded;
+        // keep it around on failure to allow debugging.
+        if (result.ok) {
+            std::error_code remove_ec;
+            std::filesystem::remove(recorded.path, remove_ec);
+        }
 
         if (!result.ok) {
             post_owned_wstring(hwnd, WM_APP_TRANSCRIPTION_ERROR, new std::wstring(utf8_to_wide(result.error)));
@@ -364,18 +405,22 @@ void App::on_transcription_success(const std::wstring& text) {
     set_clipboard_text(hwnd_, text);
     paste_.restore_and_paste();
 
-    Sleep(100);
-    if (prev_clipboard)
+    if (prev_clipboard) {
+        // Give the target app time to read the clipboard before restoring the
+        // previous content; slow targets (RDP, busy Electron apps) otherwise
+        // paste the restored text instead of the transcript.
+        Sleep(300);
         set_clipboard_text(hwnd_, *prev_clipboard);
+    }
 
     overlay_.show_done();
-    Beep(9000, 5);
+    Beep(1400, 30);
     state_ = AppState::idle;
     set_tray_state(TrayState::Idle);
 }
 
 void App::on_transcription_error(const std::wstring& message) {
-    HistoryStore store(exe_dir_ / config::kOutputDir);
+    HistoryStore store(data_dir_ / config::kOutputDir);
     store.log_error(wide_to_utf8(message));
     overlay_.show_error(message);
     Beep(300, 600);

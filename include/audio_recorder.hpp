@@ -6,6 +6,8 @@
 struct RecordedAudio {
     bool ok{false};
     bool has_audio{false};
+    std::uint64_t captured_frames{0};  // duration = captured_frames / sample rate
+    int peak_amplitude{0};             // max |sample| seen, 0..32768
     std::filesystem::path path;
     std::string upload_filename;
     std::string mime_type;

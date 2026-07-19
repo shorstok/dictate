@@ -1,5 +1,7 @@
 #pragma once
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <filesystem>
 #include <string>
@@ -20,6 +22,7 @@ constexpr UINT WM_APP_TRANSCRIPTION_ERROR = WM_APP + 2;
 constexpr UINT WM_APP_TRAY                = WM_APP + 10;
 constexpr UINT WM_APP_HOLD_START          = WM_APP + 20;
 constexpr UINT WM_APP_HOLD_STOP           = WM_APP + 21;
+constexpr UINT WM_APP_HOLD_LATCHED        = WM_APP + 22;
 
 class App {
 public:
@@ -51,8 +54,10 @@ private:
     TrayState tray_state_{TrayState::Idle};
     std::wstring tray_error_message_;
     std::wstring last_transcript_;
+    ULONGLONG recording_started_tick_{0};
 
     std::filesystem::path exe_dir_;
+    std::filesystem::path data_dir_;  // LocalAppData\dictate (recordings, history)
 
     HotkeyManager        hotkey_;
     OverlayWindow        overlay_;

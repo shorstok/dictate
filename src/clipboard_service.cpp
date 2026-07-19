@@ -36,10 +36,20 @@ bool set_clipboard_text(HWND owner, const std::wstring& text) {
     }
 
     void* ptr = GlobalLock(hg);
+    if (!ptr) {
+        GlobalFree(hg);
+        CloseClipboard();
+        return false;
+    }
     std::memcpy(ptr, text.c_str(), byte_count);
     GlobalUnlock(hg);
 
-    SetClipboardData(CF_UNICODETEXT, hg);
+    if (!SetClipboardData(CF_UNICODETEXT, hg)) {
+        // Ownership transfers to the system only on success.
+        GlobalFree(hg);
+        CloseClipboard();
+        return false;
+    }
     CloseClipboard();
     return true;
 }

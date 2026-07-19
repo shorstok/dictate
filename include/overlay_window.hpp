@@ -1,5 +1,7 @@
 #pragma once
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <string>
 
@@ -8,6 +10,7 @@ enum class OverlayState {
     Listening,
     Transcribing,
     Done,
+    Notice,
     Error
 };
 
@@ -22,8 +25,10 @@ public:
     void destroy();
 
     void show_listening();
+    void show_listening_latched();
     void show_transcribing();
     void show_done();
+    void show_notice(const std::wstring& message);
     void show_error(const std::wstring& message = L"Error");
     void hide();
 

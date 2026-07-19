@@ -81,6 +81,10 @@ TranscriptionResult TranscriptionClient::transcribe_file(
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "dictate_cpp/1.0");
+    // Without timeouts a hung connection leaves the app stuck in
+    // "Transcribing" forever (the state machine blocks further hotkeys).
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 120L);
 
     CURLcode res = curl_easy_perform(curl);
 

@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.8)
+# 3.21+ required by CMakePresets.json schema v3.
+cmake_minimum_required(VERSION 3.21)
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -27,7 +28,6 @@ add_executable(dictate_cpp WIN32
     src/mp3_encoder.cpp
     src/tray_icon.cpp
     src/user_config.cpp
-    src/wav_writer.cpp
     src/transcription_client.cpp
     src/clipboard_service.cpp
     src/paste_service.cpp
@@ -36,6 +36,10 @@ add_executable(dictate_cpp WIN32
 )
 
 target_compile_features(dictate_cpp PRIVATE cxx_std_20)
+
+# Source files are UTF-8; without this MSVC decodes them as the system
+# codepage and mangles non-ASCII string literals.
+target_compile_options(dictate_cpp PRIVATE /utf-8)
 
 target_compile_definitions(dictate_cpp PRIVATE
     UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)

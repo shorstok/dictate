@@ -11,8 +11,10 @@ HistoryStore::HistoryStore(const std::filesystem::path& out_dir)
 
 void HistoryStore::save_transcript(const std::string& text) {
     time_t now = time(nullptr);
+    tm local{};
+    localtime_s(&local, &now);
     char timestamp[32]{};
-    strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", localtime(&now));
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", &local);
 
     auto path = out_dir_ / ("transcript_" + std::string(timestamp) + ".txt");
     std::ofstream f(path, std::ios::out | std::ios::binary);
@@ -21,8 +23,10 @@ void HistoryStore::save_transcript(const std::string& text) {
 
 void HistoryStore::log_error(const std::string& message) {
     time_t now = time(nullptr);
+    tm local{};
+    localtime_s(&local, &now);
     char timestamp[32]{};
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &local);
 
     auto path = out_dir_ / "dictation_error.log";
     std::ofstream f(path, std::ios::app | std::ios::binary);

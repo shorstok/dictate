@@ -19,6 +19,7 @@ struct AudioRecorder::Impl {
     std::mutex encoder_mutex;
     std::string last_error;
     std::uint64_t captured_frames{0};
+    int peak_amplitude{0};
 };
 
 static void data_callback(ma_device* device, void* /*output*/, const void* input, ma_uint32 frame_count) {
@@ -47,6 +48,7 @@ bool AudioRecorder::start(const std::filesystem::path& mp3_path, std::string& er
         std::lock_guard lock(impl_->encoder_mutex);
         impl_->last_error.clear();
         impl_->captured_frames = 0;
+        impl_->peak_amplitude = 0;
 
         if (!impl_->encoder.start(
                 mp3_path,
@@ -102,20 +104,21 @@ RecordedAudio AudioRecorder::stop() {
         impl_->last_error = finish_error;
     }
 
+    RecordedAudio result;
+    result.captured_frames = impl_->captured_frames;
+    result.peak_amplitude  = impl_->peak_amplitude;
+
     if (!impl_->last_error.empty()) {
-        return {false, false, {}, {}, {}, impl_->last_error};
+        result.error = impl_->last_error;
+        return result;
     }
 
-    const std::string upload_filename = impl_->encoder.output_path().filename().string();
-
-    return {
-        true,
-        impl_->captured_frames > 0,
-        impl_->encoder.output_path(),
-        upload_filename,
-        "audio/mpeg",
-        {}
-    };
+    result.ok              = true;
+    result.has_audio       = impl_->captured_frames > 0;
+    result.path            = impl_->encoder.output_path();
+    result.upload_filename = impl_->encoder.output_path().filename().string();
+    result.mime_type       = "audio/mpeg";
+    return result;
 }
 
 void AudioRecorder::append_samples(const int16_t* data, uint32_t frame_count) {
@@ -133,6 +136,14 @@ void AudioRecorder::append_samples(const int16_t* data, uint32_t frame_count) {
     if (!impl_->encoder.encode_interleaved_s16(data, frame_count, error)) {
         impl_->last_error = error;
         return;
+    }
+
+    const std::size_t sample_count =
+        static_cast<std::size_t>(frame_count) * config::kChannels;
+    for (std::size_t i = 0; i < sample_count; ++i) {
+        int v = data[i];
+        if (v < 0) v = -v;  // note: |-32768| stays representable in int
+        if (v > impl_->peak_amplitude) impl_->peak_amplitude = v;
     }
 
     impl_->captured_frames += frame_count;

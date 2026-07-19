@@ -138,6 +138,7 @@ void OverlayWindow::paint(HDC hdc) {
     case OverlayState::Listening:    text_color = RGB(255, 230, 140); break;
     case OverlayState::Transcribing: text_color = RGB(180, 220, 255); break;
     case OverlayState::Done:         text_color = RGB(180, 255, 180); break;
+    case OverlayState::Notice:       text_color = RGB(190, 190, 190); break;
     case OverlayState::Error:        text_color = RGB(255, 170, 170); break;
     default: break;
     }
@@ -194,12 +195,20 @@ void OverlayWindow::show_listening() {
     show_text(OverlayState::Listening, L"Listening\u2026", 0);
 }
 
+void OverlayWindow::show_listening_latched() {
+    show_text(OverlayState::Listening, L"Listening (latched)\u2026", 0);
+}
+
 void OverlayWindow::show_transcribing() {
     show_text(OverlayState::Transcribing, L"Transcribing\u2026", 0);
 }
 
 void OverlayWindow::show_done() {
     show_text(OverlayState::Done, L"Done", 1200);
+}
+
+void OverlayWindow::show_notice(const std::wstring& message) {
+    show_text(OverlayState::Notice, message, 1400);
 }
 
 void OverlayWindow::show_error(const std::wstring& message) {
