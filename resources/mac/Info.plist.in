@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>@MACOSX_BUNDLE_EXECUTABLE_NAME@</string>
+    <key>CFBundleIdentifier</key>
+    <string>@DICTATE_BUNDLE_ID@</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>dictate</string>
+    <key>CFBundleDisplayName</key>
+    <string>dictate</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@DICTATE_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@DICTATE_VERSION@</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>@DICTATE_MIN_MACOS@</string>
+
+    <!-- Menu-bar agent: no Dock icon, no main menu. -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <!-- Without this the process is killed the moment miniaudio opens the
+         input device. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>dictate records your voice while you hold the dictation shortcut and transcribes it.</string>
+
+    <!-- Shown in the Accessibility / Input Monitoring prompts. -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>dictate pastes the transcript into the app you were using.</string>
+
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>

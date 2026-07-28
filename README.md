@@ -1,19 +1,19 @@
 # dictate_cpp
 
-Push-to-talk dictation for Windows. Hold **Ctrl+Win**, speak, release — the audio is
-transcribed via the OpenAI API (`gpt-4o-transcribe`) and pasted into whatever window
-had focus. Lives in the system tray; no main window.
+Push-to-talk dictation for Windows and macOS. Hold **Ctrl+Win** (**Ctrl+Cmd** on macOS),
+speak, release — the audio is transcribed via the OpenAI API (`gpt-4o-transcribe`) and
+pasted into whatever window had focus. Lives in the system tray / menu bar; no main window.
 
 ## Usage
 
 | Action | Result |
 |---|---|
-| Hold **Ctrl+Win** | Records while held ("Listening…" overlay) |
+| Hold **Ctrl+Win** / **Ctrl+Cmd** | Records while held ("Listening…" overlay) |
 | Release | Stops, transcribes, pastes the text into the previously focused window |
 | Tap the *other* Ctrl while holding | **Latch**: recording continues after releasing all keys |
 | Tap Ctrl while latched | Stops the latched recording |
-| Tray icon double-click | Shows current status overlay |
-| Tray icon right-click | Menu: show status, copy last transcript, exit |
+| Tray icon double-click (Windows) | Shows current status overlay |
+| Tray icon right-click / menu-bar click | Menu: show status, copy last transcript, exit |
 
 Feedback: a small topmost overlay near the top of the screen (Listening / Transcribing /
 Done / errors) plus short beeps. Tray icon changes with state.
@@ -25,23 +25,29 @@ gray blip, no API call is made:
 - **No speech detected** — peak amplitude stayed below `kMinPeakAmplitude`
   (a muted/wrong mic would otherwise come back as a hallucinated transcript).
 
-**Latch mode**: while holding Ctrl+Win, tap the second (other) Ctrl key —
+**Latch mode**: while holding the chord, tap the second (other) Ctrl key —
 e.g. hold LCtrl+Win, tap RCtrl. You can then release everything and recording
 continues hands-free. Tap any Ctrl again to stop and transcribe.
 
 Unrelated to the above: the codebase also contains an alternative *input mode*
 (`InputMode::ToggleHotkey` in `include/config.hpp`, off by default, compile-time
-choice) that replaces the hold-Ctrl+Win gesture entirely with a classic toggle
-hotkey — press Ctrl+Alt+Shift+F9 to start, press it again to stop.
+choice) that replaces the hold gesture entirely with a classic toggle hotkey —
+press Ctrl+Alt+Shift+F9 (Ctrl+Option+Shift+F9 on macOS) to start, press it again
+to stop. On macOS this is also the automatic fallback when Input Monitoring is
+not granted, since it does not need that permission.
 
 ## Runtime requirements
 
-- Windows 10/11
+- Windows 10/11, or macOS 11+ (Apple silicon)
 - `OPENAI_API_KEY` environment variable (read at transcription time, not stored anywhere)
+- On macOS, three separate permissions — Microphone, Input Monitoring (for the
+  hold chord) and Accessibility (to press Cmd+V for you). Each is prompted for on
+  first run; see [MACOS.md](MACOS.md) for how the app degrades when one is missing.
 
 ## Data locations
 
-Everything lives under `%LOCALAPPDATA%\dictate`:
+Everything lives under `%LOCALAPPDATA%\dictate` (`~/Library/Application Support/dictate`
+on macOS):
 
 | Path | Purpose |
 |---|---|
@@ -66,8 +72,10 @@ Ctrl+Win state machine    ──PostMessage──▸  App::handle_hotkey
                                             refocus target ▸ synthetic Ctrl+V ▸ restore clipboard
 ```
 
-The code is split into a **platform-neutral core** and **platform layers**
-(see the macOS porting guide in [MACOS.md](MACOS.md)):
+(The macOS layer is the same picture with a `CGEventTap` thread instead of the LL hook
+and `dispatch_async` instead of `PostMessage` — see [MACOS.md](MACOS.md).)
+
+The code is split into a **platform-neutral core** and **platform layers**:
 
 - `src/core` + `include/core` — the state machine, recording guards, audio →
   MP3 → OpenAI pipeline, config and history. Talks to the OS only through the
@@ -75,8 +83,9 @@ The code is split into a **platform-neutral core** and **platform layers**
   `Paster`, `Sound`, `UiDispatcher`). All strings are UTF-8.
 - `src/platform/win` — Win32 implementations of those interfaces plus
   `wWinMain` and the message loop. Converts UTF-8 ↔ UTF-16 at its boundary.
-- `src/platform/mac` — not implemented; `MACOS.md` documents exactly what to
-  build there.
+- `src/platform/mac` — Objective-C++ (`.mm`) implementations plus `main` and the
+  `NSApplication` run loop, built into a signed `.app` agent bundle. `MACOS.md`
+  documents the design decisions behind it.
 
 Key design points:
 
@@ -118,8 +127,18 @@ Key design points:
 | `src/platform/win/tray_win.cpp` | Tray icon, state icons, context menu, balloons |
 | `src/platform/win/paste_win.cpp` | Foreground-window capture + synthetic Ctrl+V |
 | `src/platform/win/clipboard_win.cpp` | Get/set clipboard text (UTF-8 ↔ UTF-16) |
+| `src/platform/mac/main_mac.mm` | `main`, NSApplication run loop, service wiring, data-dir resolution |
+| `src/platform/mac/hotkey_mac.mm` | CGEventTap thread; hold/latch state machine + Carbon hotkey fallback |
+| `src/platform/mac/overlay_mac.mm` | Borderless non-activating NSPanel overlay |
+| `src/platform/mac/tray_mac.mm` | NSStatusItem, state images, menu, notifications |
+| `src/platform/mac/paste_mac.mm` | Frontmost-app capture + synthetic Cmd+V |
+| `src/platform/mac/clipboard_mac.mm` | Get/set NSPasteboard text |
+| `src/platform/mac/permissions_mac.mm` | TCC probes + System Settings deep links |
+| `src/platform/mac/mac_common.mm` | Private tagged CGEventSource (synthetic-event detection) |
 
 ## Building
+
+### Windows
 
 Prerequisites:
 
@@ -147,6 +166,29 @@ configure, vcpkg builds the dependencies declared in `vcpkg.json` (curl,
 nlohmann-json, mp3lame) into `out\build\<preset>\vcpkg_installed` — that first run
 takes a while; later runs are incremental.
 
+### macOS
+
+Prerequisites:
+
+- Xcode Command Line Tools (`xcode-select --install`)
+- `brew install cmake ninja pkg-config` — `pkg-config` is required by vcpkg's
+  openssl port, and the configure fails without it
+- [vcpkg](https://github.com/microsoft/vcpkg) with `VCPKG_ROOT` set
+
+```sh
+cmake --preset mac-release       # also: mac-debug
+cmake --build --preset mac-release
+open out/build/mac-release/dictate_cpp.app
+```
+
+The result is `out/build/<preset>/dictate_cpp.app`, ad-hoc code-signed with a
+stable identifier so the macOS privacy grants survive rebuilds.
+
+**After building, follow [INSTALL_MACOS.md](INSTALL_MACOS.md)** — installing to a
+stable path, setting `OPENAI_API_KEY` where a GUI app can actually see it, and
+granting the three permissions. See [MACOS.md](MACOS.md) for the internals and
+the signing knobs.
+
 ## Project layout — why it looks the way it does
 
 ```
@@ -156,10 +198,11 @@ vcpkg.json            dependency manifest (curl, nlohmann-json, mp3lame)
 include/core/         portable headers + the platform interface contract
 src/core/             portable implementation (state machine, audio, network, storage)
 src/platform/win/     Win32 layer: entry point, hook, overlay, tray, clipboard, paste
-src/platform/mac/     macOS layer — not yet implemented, see MACOS.md
+src/platform/mac/     macOS layer: entry point, event tap, overlay, status item, clipboard,
+                      paste, TCC permissions (Objective-C++) — see MACOS.md
 external/miniaudio    vendored single-header audio library (not in vcpkg's model of a
                       linkable lib; pinning the header is simpler)
-resources/ assets/    .rc file, icons
+resources/ assets/    Windows .rc file, macOS Info.plist template + icns script, icons
 out/                  ALL build output — generated, disposable, gitignored
 plans/                design notes
 ```

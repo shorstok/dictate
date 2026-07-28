@@ -49,25 +49,87 @@ if (WIN32)
   # codepage and mangles non-ASCII string literals.
   target_compile_options(dictate_cpp PRIVATE /utf-8)
 elseif (APPLE)
-  # The macOS platform layer is not implemented yet — see MACOS.md for the
-  # porting guide (interfaces to implement, permissions, packaging).
-  # Expected shape once implemented:
-  #   enable_language(OBJCXX)
-  #   add_executable(dictate_cpp MACOSX_BUNDLE
-  #       ${CORE_SOURCES}
-  #       src/platform/mac/main_mac.mm        # NSApplication run loop, service wiring
-  #       src/platform/mac/hotkey_mac.mm      # CGEventTap chord/latch state machine
-  #       src/platform/mac/overlay_mac.mm     # non-activating NSPanel
-  #       src/platform/mac/tray_mac.mm        # NSStatusItem
-  #       src/platform/mac/clipboard_mac.mm   # NSPasteboard
-  #       src/platform/mac/paste_mac.mm       # CGEventPost Cmd+V
-  #   )
-  #   set_target_properties(dictate_cpp PROPERTIES
-  #       MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/mac/Info.plist)
-  #   target_link_libraries(dictate_cpp PRIVATE
-  #       "-framework Cocoa" "-framework Carbon" "-framework CoreAudio"
-  #       "-framework AudioToolbox" "-framework ApplicationServices")
-  message(FATAL_ERROR "macOS platform layer not implemented yet — see MACOS.md.")
+  enable_language(OBJCXX)
+
+  # TCC (microphone / input monitoring / accessibility) grants are keyed to the
+  # code signature. Keeping the bundle id and the signing identifier stable is
+  # what stops every rebuild from losing them — see MACOS.md.
+  set(DICTATE_BUNDLE_ID "com.shorstok.dictate" CACHE STRING
+      "macOS bundle identifier; TCC permissions are keyed to it")
+  set(DICTATE_CODESIGN_IDENTITY "-" CACHE STRING
+      "codesign identity for the app bundle ('-' = ad-hoc)")
+  set(DICTATE_MIN_MACOS "11.0" CACHE STRING "LSMinimumSystemVersion in Info.plist")
+  set(DICTATE_VERSION "0.1.0")
+
+  set(MACOSX_BUNDLE_EXECUTABLE_NAME dictate_cpp)
+  configure_file(
+      ${CMAKE_SOURCE_DIR}/resources/mac/Info.plist.in
+      ${CMAKE_CURRENT_BINARY_DIR}/Info.plist
+      @ONLY)
+
+  # Menu-bar images. The 128px originals are scaled down to 18pt at runtime,
+  # which stays sharp on Retina without separate @2x files.
+  set(MAC_RESOURCES
+      ${CMAKE_SOURCE_DIR}/assets/app.png
+      ${CMAKE_SOURCE_DIR}/assets/app_listening.png
+      ${CMAKE_SOURCE_DIR}/assets/app_transcribing.png
+      ${CMAKE_SOURCE_DIR}/assets/app_error.png
+  )
+
+  # Finder/Get Info icon. The app is an agent, so this is cosmetic — if the
+  # generator fails, the build carries on without it.
+  set(APP_ICNS ${CMAKE_CURRENT_BINARY_DIR}/AppIcon.icns)
+  add_custom_command(
+      OUTPUT ${APP_ICNS}
+      COMMAND sh ${CMAKE_SOURCE_DIR}/resources/mac/make_icns.sh
+              ${CMAKE_SOURCE_DIR}/assets/app.png ${APP_ICNS}
+      DEPENDS ${CMAKE_SOURCE_DIR}/assets/app.png
+              ${CMAKE_SOURCE_DIR}/resources/mac/make_icns.sh
+      COMMENT "Generating AppIcon.icns"
+      VERBATIM)
+  list(APPEND MAC_RESOURCES ${APP_ICNS})
+
+  add_executable(dictate_cpp MACOSX_BUNDLE
+      ${CORE_SOURCES}
+      src/platform/mac/main_mac.mm         # NSApplication run loop, service wiring
+      src/platform/mac/hotkey_mac.mm       # CGEventTap chord/latch state machine
+      src/platform/mac/overlay_mac.mm      # non-activating NSPanel
+      src/platform/mac/tray_mac.mm         # NSStatusItem
+      src/platform/mac/clipboard_mac.mm    # NSPasteboard
+      src/platform/mac/paste_mac.mm        # CGEventPost Cmd+V
+      src/platform/mac/permissions_mac.mm  # TCC probes + settings deep links
+      src/platform/mac/mac_common.mm       # synthetic-event tagging
+      ${MAC_RESOURCES}
+  )
+  set_source_files_properties(${MAC_RESOURCES} PROPERTIES
+      MACOSX_PACKAGE_LOCATION Resources)
+
+  target_include_directories(dictate_cpp PRIVATE src/platform/mac)
+  set_target_properties(dictate_cpp PROPERTIES
+      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_BINARY_DIR}/Info.plist
+      # cxx_std_20 below only covers CXX; the .mm files need this too.
+      OBJCXX_STANDARD 20
+      OBJCXX_STANDARD_REQUIRED ON)
+
+  target_link_libraries(dictate_cpp PRIVATE
+      "-framework Cocoa"
+      "-framework Carbon"
+      "-framework AVFoundation"
+      "-framework UserNotifications"
+      "-framework ApplicationServices"
+      "-framework CoreFoundation"
+      "-framework CoreAudio"
+      "-framework AudioUnit"
+      "-framework AudioToolbox")
+
+  # Ad-hoc signing with an explicit --identifier keeps TCC grants across
+  # rebuilds; without it every build looks like a different app.
+  add_custom_command(TARGET dictate_cpp POST_BUILD
+      COMMAND codesign --force --sign "${DICTATE_CODESIGN_IDENTITY}"
+              --identifier "${DICTATE_BUNDLE_ID}"
+              "$<TARGET_BUNDLE_DIR:dictate_cpp>"
+      COMMENT "Code signing dictate_cpp.app as ${DICTATE_BUNDLE_ID}"
+      VERBATIM)
 else()
   message(FATAL_ERROR "Unsupported platform.")
 endif()
